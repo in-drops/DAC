@@ -1,0 +1,40 @@
+# Чувствительные данные
+.env
+/config/data/accounts.xlsx
+/config/data/balances.xlsx
+/config/data/report.xlsx
+/config/data/wallets_deposits.xlsx
+/config/data/passwords.txt
+/config/data/private_keys.txt
+/config/data/profile_numbers.txt
+/config/data/proxies.txt
+/config/data/seeds.txt
+/config/data/addresses.txt
+
+# Трекинг-файлы (заполняются скриптами во время работы)
+/config/data/*.txt
+!/config/data/user_agents.txt
+/config/data/*.xlsx
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*$py.class
+.Python
+*.egg-info/
+dist/
+build/
+
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# Логи
+*.log
+logs/
+
+# IDE
+.idea/
