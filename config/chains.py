@@ -101,6 +101,7 @@ class Chains:
         chain_id=21894,
         native_token='DACC',
         metamask_name='DAC Testnet',
+        is_eip1559=False,
     )
 
 
