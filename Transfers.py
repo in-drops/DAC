@@ -21,7 +21,7 @@ TRANSFER_COUNT_MAX    = 5
 TRANSFER_FILTER_LIMIT = 50
 AMOUNT_MIN            = 0.0001   # минимум: одна десятитысячная DACC
 AMOUNT_MAX            = 0.1      # максимум: одна десятая DACC
-GAS_RESERVE           = 0.01     # резерв на газ в DACC
+GAS_RESERVE           = 0.15     # резерв на газ в DACC
 MAX_ERRORS            = 3
 
 FILE_TRANSFERS_COUNT = 'transfers_count.txt'
