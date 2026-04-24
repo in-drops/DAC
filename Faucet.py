@@ -327,7 +327,7 @@ def accounts_filter(accounts):
         badge_needed = get_value_from_txt(acc, FILE_EARLY_BADGE) != 'SUCCESS'
 
         if not faucet_rdy and not badge_needed:
-            logger.info(f'{acc.profile_number} Фосет на кулдауне, бейдж уже получен — пропускаем')
+            logger.info(f'{acc.profile_number} Фосет на кулдауне...')
             continue
         result.append(acc)
     return result
