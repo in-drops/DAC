@@ -185,44 +185,47 @@ def open_crate(
 def _format_reward(open_result: dict, qe_before: int, profile_after: dict | None) -> str:
     """Формирует строку лога с содержимым ящика.
 
-    Поля API (из JS bundle inception.dachain.io):
-      reward_type  — "booster" | "dacc" | None (если QE)
-      qe_awarded   — количество QE (> 0 если QE приз)
-      reward_label — текстовый лейбл ("150 QE", "2x Booster 24h" и т.д.)
-      dacc_tx_hash — хэш транзакции для DACC дропа
+    Реальная структура API-ответа:
+      open_result['reward'] = {
+        label, type, amount, multiplier, hours, dacc, tx_hash
+      }
+      open_result['new_total_qe'] — баланс после открытия
     """
     parts = []
 
-    reward_label = open_result.get("reward_label", "")
-    reward_type  = open_result.get("reward_type", "")
-    qe_awarded   = open_result.get("qe_awarded", 0)
-    dacc_tx_hash = open_result.get("dacc_tx_hash", "")
+    reward      = open_result.get("reward") or {}
+    label       = reward.get("label", "")
+    rtype       = reward.get("type", "")
+    amount      = reward.get("amount", 0)
+    multiplier  = reward.get("multiplier")
+    hours       = reward.get("hours")
+    dacc        = reward.get("dacc", 0)
+    tx_hash     = reward.get("tx_hash", "")
+    new_total   = open_result.get("new_total_qe", 0)
 
-    if reward_label:
-        parts.append(f"награда: {reward_label}")
-    elif reward_type == "booster":
-        parts.append("награда: Booster")
-    elif reward_type == "dacc":
-        parts.append("награда: DACC drop")
-    elif qe_awarded:
-        parts.append(f"награда: {qe_awarded} QE")
+    if rtype == "qe":
+        parts.append(f"награда: {label or f'{amount} QE'}")
+    elif rtype == "multiplier":
+        mult_str  = f"{multiplier}x" if multiplier else "?"
+        hours_str = f" {hours}ч" if hours else ""
+        parts.append(f"награда: Множитель {mult_str}{hours_str}")
+    elif rtype == "dacc":
+        dacc_str = f"{dacc} DACC" if dacc else "DACC"
+        parts.append(f"награда: {dacc_str}")
+        if tx_hash:
+            parts.append(f"tx: {tx_hash[:20]}...")
+    elif rtype == "jackpot":
+        parts.append(f"награда: 🎰 JACKPOT {label or f'{amount} QE'}")
+    elif label:
+        parts.append(f"награда: {label}")
+    elif rtype:
+        parts.append(f"награда: {rtype} {amount}")
+    else:
+        parts.append(f"raw: {open_result}")
 
-    if reward_type:
-        parts.append(f"тип: {reward_type}")
-
-    if dacc_tx_hash:
-        status = "pending" if str(dacc_tx_hash).startswith("pending:") else dacc_tx_hash[:16] + "..."
-        parts.append(f"tx: {status}")
-
-    # Дельта QE через профиль (запасной вариант если qe_awarded нет)
-    if not qe_awarded and profile_after:
-        new_balance = profile_after.get("qe_balance", qe_before)
-        delta = int(new_balance) - int(qe_before) + CRATE_COST_QE
-        if delta > 0:
-            parts.append(f"QE в ящике: +{delta}")
-
-    if profile_after:
-        parts.append(f"баланс QE: {profile_after.get('qe_balance', '?')}")
+    balance = new_total or (profile_after.get("qe_balance") if profile_after else None)
+    if balance:
+        parts.append(f"баланс QE: {balance}")
 
     return " | ".join(parts) if parts else str(open_result)
 
