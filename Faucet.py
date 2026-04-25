@@ -25,6 +25,8 @@ MAX_RETRIES           = 3
 
 FILE_FAUCET_DATE  = 'faucet_date.txt'
 FILE_EARLY_BADGE  = 'early_badge_status.txt'
+FILE_SCOUTING     = 'scouting_status.txt'    # exp_leaderboard — Scouting (25 QE, одноразово)
+FILE_EXPLORER     = 'explorer_status.txt'    # exp_explorer    — Block Sleuth (50 QE, одноразово)
 FILE_STATS        = 'stats.txt'
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -232,9 +234,43 @@ def claim_early_badge(bot: Bot, ctx: _Ctx) -> None:
         logger.warning(f'{bot.account.profile_number} Early Badge: {data.get("error", data)}')
 
 
+def claim_scouting(bot: Bot, ctx: _Ctx) -> None:
+    """Scouting badge — посещение лидерборда (25 QE, одноразово)."""
+    if get_value_from_txt(bot.account, FILE_SCOUTING) == 'SUCCESS':
+        return
+
+    resp = ctx.post('/api/inception/visit/leaderboard/', referer='/leaderboard')
+    data = resp.json()
+    if data.get('success'):
+        cell_value_to_txt(bot, 'SUCCESS', FILE_SCOUTING)
+        if data.get('awarded'):
+            logger.success(f'{bot.account.profile_number} Scouting badge получен! 🎯')
+    else:
+        logger.warning(f'{bot.account.profile_number} Scouting: {data}')
+
+
+def claim_explorer(bot: Bot, ctx: _Ctx) -> None:
+    """Block Sleuth badge — посещение explorer (50 QE, одноразово)."""
+    if get_value_from_txt(bot.account, FILE_EXPLORER) == 'SUCCESS':
+        return
+
+    resp = ctx.post('/api/inception/visit/explorer/', referer='/explorer')
+    data = resp.json()
+    if data.get('success'):
+        cell_value_to_txt(bot, 'SUCCESS', FILE_EXPLORER)
+        if data.get('awarded'):
+            logger.success(f'{bot.account.profile_number} Block Sleuth badge получен! 🎯')
+    else:
+        logger.warning(f'{bot.account.profile_number} Block Sleuth: {data}')
+
+
 def claim_faucet(bot: Bot, ctx: _Ctx) -> bool:
     last = get_date_from_txt(bot.account, FILE_FAUCET_DATE)
     if last and datetime.now() - last < timedelta(hours=FAUCET_COOLDOWN_HOURS):
+        remaining = timedelta(hours=FAUCET_COOLDOWN_HOURS) - (datetime.now() - last)
+        hours = int(remaining.total_seconds() // 3600)
+        mins  = int((remaining.total_seconds() % 3600) // 60)
+        logger.info(f'{bot.account.profile_number} Фосет кулдаун: ещё {hours}ч {mins}м')
         return False
 
     # Проверяем кулдаун только если seconds_left > 0 (реальный кулдаун)
@@ -303,6 +339,8 @@ def worker(account) -> None:
         for attempt in range(2):
             try:
                 claim_early_badge(bot, ctx)
+                claim_scouting(bot, ctx)
+                claim_explorer(bot, ctx)
                 claim_faucet(bot, ctx)
                 profile = _get_profile(ctx)
                 update_stats_txt(bot, profile)
