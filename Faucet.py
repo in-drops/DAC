@@ -250,7 +250,7 @@ def claim_scouting(bot: Bot, ctx: _Ctx) -> None:
 
 
 def claim_explorer(bot: Bot, ctx: _Ctx) -> None:
-    """Block Sleuth badge — посещение explorer (50 QE, одноразово). """
+    """Block Sleuth badge — посещение explorer (50 QE, одноразово)."""
     if get_value_from_txt(bot.account, FILE_EXPLORER) == 'SUCCESS':
         return
 
