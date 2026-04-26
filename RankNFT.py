@@ -28,7 +28,7 @@ from utils.utils import (
 BASE_URL    = 'https://inception.dachain.io'
 MAX_RETRIES = 3
 MINT_PAUSE  = (20, 50)   # пауза между минтами в рамках одного аккаунта (сек)
-GAS_RESERVE = 0.15       # мин. резерв DACC на газ
+GAS_RESERVE = 1.0      # мин. резерв DACC на газ
 
 NFT_CONTRACT = Web3.to_checksum_address('0xB36ab4c2Bd6aCfC36e9D6c53F39F4301901Bd647')
 NFT_ABI = [
