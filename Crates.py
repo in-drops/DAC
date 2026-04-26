@@ -9,7 +9,6 @@ from loguru import logger
 from config.settings import config
 from models.account import Account
 from utils.inputs import (
-    increase_counter_in_txt,
     input_pause, input_cycle_amount, input_cycle_pause, start_pause,
 )
 from utils.logging import init_logger
@@ -31,7 +30,8 @@ REFERRER_PAGES = [
 ]
 
 CRATE_COST_QE = 150
-DAILY_LIMIT = 5
+DAILY_LIMIT   = 5
+CRATE_WINDOW  = timedelta(hours=24, minutes=10)
 
 class SessionExpired(Exception):
     pass
@@ -160,6 +160,10 @@ def open_crate(
             if resp.status_code == 401:
                 raise SessionExpired("сессия истекла (401)")
 
+            if resp.status_code == 429:
+                logger.warning(f"{account.profile_number} ⚠️ Rate limit (429) — прекращаем")
+                return None, None
+
             resp.raise_for_status()
             open_result = resp.json()
 
@@ -230,37 +234,60 @@ def _format_reward(open_result: dict, qe_before: int, profile_after: dict | None
     return " | ".join(parts) if parts else str(open_result)
 
 
-def get_today_opens(account: Account) -> int:
-    """Возвращает количество открытий ящиков сегодня.
-
-    Использует crates_count.txt. Если дата в файле != сегодня — возвращает 0.
-    """
+def _get_recent_opens(account: Account) -> int:
+    """Возвращает количество открытий за последние 24 часа."""
     from pathlib import Path
     filepath = Path("config/data/crates_count.txt")
-    today = datetime.now().strftime("%Y-%m-%d")
-
     if not filepath.exists():
         return 0
-
     with open(filepath, "r", encoding="utf-8") as f:
         for line in reversed(f.readlines()):
             parts = line.strip().split("\t")
             if len(parts) == 4 and str(parts[0]) == str(account.profile_number):
-                saved_date = parts[2]
-                if saved_date == today:
+                try:
+                    saved_dt = datetime.strptime(parts[2], "%Y-%m-%d %H:%M:%S")
+                except ValueError:
                     try:
-                        return int(parts[3])
+                        saved_dt = datetime.strptime(parts[2], "%Y-%m-%d")
                     except ValueError:
                         return 0
-                else:
-                    return 0  # день сменился — счётчик сброшен
+                if datetime.now() - saved_dt < CRATE_WINDOW:
+                    return int(parts[3])
+                return 0  # 24ч прошло — сброс
     return 0
+
+
+def _inc_crate_count(bot) -> None:
+    """Увеличивает счётчик крейтов с datetime для 24-часового окна."""
+    from pathlib import Path
+    filepath = Path("config/data/crates_count.txt")
+    profile_number = str(bot.account.profile_number)
+    date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lines = []
+    if filepath.exists():
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    new_lines = []
+    updated = False
+    for line in lines:
+        parts = line.strip().split("\t")
+        if len(parts) == 4 and parts[0] == profile_number:
+            count = int(parts[3]) + 1
+            new_lines.append(f"{profile_number}\t{bot.account.address}\t{date_str}\t{count}\n")
+            updated = True
+        else:
+            new_lines.append(line)
+    if not updated:
+        new_lines.append(f"{profile_number}\t{bot.account.address}\t{date_str}\t1\n")
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
 
 
 def accounts_filter(accounts: list[Account]) -> list[Account]:
     filtered = []
     for account in accounts:
-        opens_today = get_today_opens(account)
+        opens_today = _get_recent_opens(account)
         if opens_today >= DAILY_LIMIT:
             logger.warning(
                 f"{account.profile_number} ⚠️ Пропуск — дневной лимит достигнут ({opens_today}/{DAILY_LIMIT})"
@@ -291,7 +318,7 @@ def worker(account: Account) -> None:
         )
         return
 
-    opens_today = get_today_opens(account)
+    opens_today = _get_recent_opens(account)
     remaining_daily = DAILY_LIMIT - opens_today
     actual_count = min(max_by_qe, remaining_daily)
 
@@ -324,7 +351,7 @@ def worker(account: Account) -> None:
 
         reauth_attempts = 0
         opened += 1
-        increase_counter_in_txt(bot, "crates_count.txt")
+        _inc_crate_count(bot)
 
         reward_info = _format_reward(open_result, current_qe, profile_after)
         logger.success(f"{account.profile_number} 🎯 Ящик {i + 1}/{actual_count}: {reward_info}")
