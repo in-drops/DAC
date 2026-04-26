@@ -493,6 +493,9 @@ MAX_WORKER_ATTEMPTS = 3
 
 def worker(account) -> None:
     account.user_agent = get_user_agent()
+    if not _check_gas(account):
+        logger.warning(f'{account.profile_number} ⚠️ Недостаточно DACC для газа (мин. {GAS_RESERVE}) — пропускаем')
+        return
     result = None
     with Bot(account) as bot:
         for attempt in range(1, MAX_WORKER_ATTEMPTS + 1):
@@ -546,9 +549,6 @@ def accounts_filter(accounts: list) -> list:
                     continue
             except (ValueError, IndexError):
                 pass
-        if not _check_gas(acc):
-            logger.warning(f'{acc.profile_number} ⚠️ Недостаточно DACC для газа ({GAS_RESERVE} мин.) — пропускаем')
-            continue
         result.append(acc)
     return result
 
