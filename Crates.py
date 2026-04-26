@@ -161,7 +161,7 @@ def open_crate(
                 raise SessionExpired("сессия истекла (401)")
 
             if resp.status_code == 429:
-                logger.warning(f"{account.profile_number} ⚠️ Rate limit (429) — прекращаем")
+                logger.warning(f"{account.profile_number} ⚠️ Кулдаун крейтов ещё не истёк")
                 return None, None
 
             resp.raise_for_status()
@@ -186,7 +186,7 @@ def open_crate(
     return None, None
 
 
-def _format_reward(open_result: dict, qe_before: int, profile_after: dict | None) -> str:
+def _format_reward(open_result: dict, profile_after: dict | None) -> str:
     """Формирует строку лога с содержимым ящика.
 
     Реальная структура API-ответа:
@@ -353,7 +353,7 @@ def worker(account: Account) -> None:
         opened += 1
         _inc_crate_count(bot)
 
-        reward_info = _format_reward(open_result, current_qe, profile_after)
+        reward_info = _format_reward(open_result, profile_after)
         logger.success(f"{account.profile_number} 🎯 Ящик {i + 1}/{actual_count}: {reward_info}")
 
         if profile_after:
