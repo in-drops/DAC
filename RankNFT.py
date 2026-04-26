@@ -546,6 +546,9 @@ def accounts_filter(accounts: list) -> list:
                     continue
             except (ValueError, IndexError):
                 pass
+        if not _check_gas(acc):
+            logger.warning(f'{acc.profile_number} ⚠️ Недостаточно DACC для газа ({GAS_RESERVE} мин.) — пропускаем')
+            continue
         result.append(acc)
     return result
 
