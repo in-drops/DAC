@@ -20,7 +20,7 @@ from utils.utils import (
 
 # ─── Константы ────────────────────────────────────────────────────────────────
 BASE_URL              = 'https://inception.dachain.io'
-FAUCET_COOLDOWN_HOURS = 7        # 8ч кулдаун — проверяем через 7ч
+FAUCET_COOLDOWN = timedelta(hours=8, minutes=5)
 MAX_RETRIES           = 3
 
 FILE_FAUCET_DATE  = 'faucet_date.txt'
@@ -161,6 +161,28 @@ class _Ctx:
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+def _write_faucet_date(bot, dt: datetime) -> None:
+    """Записывает произвольную дату в faucet_date.txt (для синхронизации с API кулдауном)."""
+    from pathlib import Path
+    filepath = Path('config/data') / FILE_FAUCET_DATE
+    profile_number = str(bot.account.profile_number)
+    date_str = dt.strftime('%Y-%m-%d %H:%M:%S')
+    lines = []
+    updated = False
+    if filepath.exists():
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip().split('\t')[0] == profile_number:
+                    lines.append(f'{profile_number}\t{bot.account.address}\t{date_str}\n')
+                    updated = True
+                else:
+                    lines.append(line)
+    if not updated:
+        lines.append(f'{profile_number}\t{bot.account.address}\t{date_str}\n')
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.writelines(lines)
+
+
 def _get_profile(ctx: _Ctx) -> dict:
     resp = ctx.get('/api/inception/profile/')
     resp.raise_for_status()
@@ -219,9 +241,9 @@ def claim_early_badge(bot: Bot, ctx: _Ctx) -> None:
         return
 
     profile = _get_profile(ctx)
-    if profile.get('early_badge_claimed'):
+    badge_keys = {b.get('badge__key') for b in profile.get('badges', [])}
+    if 'sys_early_badge' in badge_keys:
         cell_value_to_txt(bot, 'SUCCESS', FILE_EARLY_BADGE)
-        logger.info(f'{bot.account.profile_number} Early Badge на аккаунте — записываем SUCCESS')
         return
 
     resp = ctx.post('/api/inception/claim-badge/', {'key': 'sys_early_badge'})
@@ -231,7 +253,11 @@ def claim_early_badge(bot: Bot, ctx: _Ctx) -> None:
         cell_value_to_txt(bot, 'SUCCESS', FILE_EARLY_BADGE)
         logger.success(f'{bot.account.profile_number} Early Badge получен! QE: +{data.get("qe_awarded", 0)} 🎯')
     else:
-        logger.warning(f'{bot.account.profile_number} Early Badge: {data.get("error", data)}')
+        err = str(data.get('error', data))
+        if 'already' in err.lower() or 'claimed' in err.lower():
+            cell_value_to_txt(bot, 'SUCCESS', FILE_EARLY_BADGE)
+        else:
+            logger.warning(f'{bot.account.profile_number} Early Badge: {err}')
 
 
 def claim_scouting(bot: Bot, ctx: _Ctx) -> None:
@@ -266,8 +292,8 @@ def claim_explorer(bot: Bot, ctx: _Ctx) -> None:
 
 def claim_faucet(bot: Bot, ctx: _Ctx) -> bool:
     last = get_date_from_txt(bot.account, FILE_FAUCET_DATE)
-    if last and datetime.now() - last < timedelta(hours=FAUCET_COOLDOWN_HOURS):
-        remaining = timedelta(hours=FAUCET_COOLDOWN_HOURS) - (datetime.now() - last)
+    if last and datetime.now() - last < FAUCET_COOLDOWN:
+        remaining = FAUCET_COOLDOWN - (datetime.now() - last)
         hours = int(remaining.total_seconds() // 3600)
         mins  = int((remaining.total_seconds() % 3600) // 60)
         logger.info(f'{bot.account.profile_number} Фосет кулдаун: ещё {hours}ч {mins}м')
@@ -281,6 +307,9 @@ def claim_faucet(bot: Bot, ctx: _Ctx) -> bool:
             f'{bot.account.profile_number} Фосет кулдаун: '
             f'ещё {secs // 3600}ч {(secs % 3600) // 60}м'
         )
+        # Синхронизируем локальный файл с реальным кулдауном платформы
+        corrected = datetime.now() - FAUCET_COOLDOWN + timedelta(seconds=secs)
+        _write_faucet_date(bot, corrected)
         return False
 
     # Имитируем посещение страницы фосета перед клеймом
@@ -357,14 +386,8 @@ def worker(account) -> None:
 def accounts_filter(accounts):
     result = []
     for acc in accounts:
-        faucet_rdy = True
         last = get_date_from_txt(acc, FILE_FAUCET_DATE)
-        if last and datetime.now() - last < timedelta(hours=FAUCET_COOLDOWN_HOURS):
-            faucet_rdy = False
-
-        badge_needed = get_value_from_txt(acc, FILE_EARLY_BADGE) != 'SUCCESS'
-
-        if not faucet_rdy and not badge_needed:
+        if last and datetime.now() - last < FAUCET_COOLDOWN:
             logger.info(f'{acc.profile_number} Фосет на кулдауне...')
             continue
         result.append(acc)
