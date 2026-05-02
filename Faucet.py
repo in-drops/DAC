@@ -20,7 +20,7 @@ from utils.utils import (
 
 # ─── Константы ────────────────────────────────────────────────────────────────
 BASE_URL              = 'https://inception.dachain.io'
-FAUCET_COOLDOWN = timedelta(hours=8, minutes=5)
+FAUCET_COOLDOWN = timedelta(hours=24, minutes=5)
 MAX_RETRIES           = 3
 
 FILE_FAUCET_DATE  = 'faucet_date.txt'
