@@ -102,6 +102,7 @@ class Chains:
         native_token='DACC',
         metamask_name='DAC Testnet',
         is_eip1559=False,
+        multiplier=2.0,
     )
 
 

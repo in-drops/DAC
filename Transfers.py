@@ -22,7 +22,7 @@ TRANSFER_FILTER_LIMIT = 50
 AMOUNT_MIN            = 0.0001   # минимум: одна десятитысячная DACC
 AMOUNT_MAX            = 0.1      # максимум: одна десятая DACC
 GAS_RESERVE           = 0.15     # резерв на газ в DACC
-MAX_ERRORS            = 3
+MAX_ERRORS            = 5
 
 FILE_TRANSFERS_COUNT = 'transfers_count.txt'
 FILE_TRANSFERS_DATE  = 'transfers_date.txt'
@@ -68,12 +68,41 @@ def accounts_filter(accounts):
     return result
 
 
+NETWORK_ERR_MARKERS = (
+    'SSLEOFError', 'SSLError', 'ProxyError', 'Max retries',
+    'Remote end closed', 'ConnectionError', 'Read timed out'
+)
+
+
+def is_network_error(e: Exception) -> bool:
+    return any(s in str(e) for s in NETWORK_ERR_MARKERS)
+
+
+def safe_get_balance(account, chain, attempts: int = 4):
+    """Получить баланс с retry на сетевых ошибках. Пересоздаёт Onchain каждую попытку."""
+    last_err = None
+    for n in range(1, attempts + 1):
+        try:
+            onchain = Onchain(account, chain)
+            return onchain.get_balance(), onchain
+        except Exception as e:
+            last_err = e
+            if not is_network_error(e):
+                raise
+            if n < attempts:
+                random_sleep(20, 40)
+    raise last_err
+
+
 def worker(account) -> None:
     account.user_agent = get_user_agent()
 
     with Bot(account, chain=Chains.DAC_TESTNET) as bot:
-        onchain = Onchain(bot.account, bot.chain)
-        balance = onchain.get_balance()
+        try:
+            balance, onchain = safe_get_balance(bot.account, bot.chain)
+        except Exception as e:
+            logger.error(f'{account.profile_number} Не удалось получить баланс после ретраев: {e}')
+            return
         symbol  = bot.chain.native_token
 
         logger.info(
@@ -116,6 +145,10 @@ def worker(account) -> None:
                 if errors >= MAX_ERRORS:
                     logger.warning(f'⚠️ {account.profile_number} Достигнут лимит ошибок ({MAX_ERRORS}), пропускаем аккаунт')
                     break
+                # При сетевых ошибках RPC даём ноде время восстановиться и пересоздаём соединение
+                if is_network_error(e):
+                    random_sleep(30, 60)
+                    onchain = Onchain(bot.account, bot.chain)
                 continue
 
             if i < len(amounts) - 1:

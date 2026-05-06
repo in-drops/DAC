@@ -38,6 +38,7 @@ class Onchain:
             'headers': {
                 'User-Agent': ua,
                 "Content-Type": "application/json",
+                'Connection': 'close',
             },
             'proxies': None
         }
